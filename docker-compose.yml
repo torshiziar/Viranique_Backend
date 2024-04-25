@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+
+  backend:
+    build: .
+    container_name: backend
+    command: gunicorn Angizeh_2.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - .:/usr/src/app
+      - static:/usr/src/app/static
+    expose:
+      - 8000
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  frontend:
+    build: Frontend
+    container_name: frontend
+    volumes:
+      - .:/usr/src/app/Frontend
+      - dist:/usr/src/app/Frontend/dist
+    ports:
+      - 3000:3000
+    env_file:
+      - Frontend/.env
+
+  daphne:
+    build: .
+    container_name: daphne
+    command: daphne -p 8001 Angizeh_2.asgi:application
+    env_file:
+        - .env
+    volumes:
+        - .:/usr/src/app
+    depends_on:
+        - db
+        - redis
+    expose:
+        - 8001
+
+  db:
+    image: postgres:13.0-alpine
+    container_name: postgresdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+
+  nginx:
+    build: nginx
+    container_name: nginx
+    volumes:
+      - static:/usr/src/app/static
+      - dist:/var/www/react
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+      - frontend
+
+  redis:
+    build: redis
+    container_name: redis
+    ports:
+      - 6379:6379
+
+  memcached:
+    image: memcached
+    container_name: memcached
+    ports:
+      - 11211:11211
+
+  celery_worker:
+    build: .
+    container_name: platform_worker
+    command: celery -A Angizeh_2 worker --loglevel=INFO
+    volumes:
+      - .:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - backend
+
+  celery_beat:
+    build: .
+    container_name: platform_beat
+    command: celery -A Angizeh_2 beat --loglevel=INFO
+    volumes:
+      - .:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - backend
+
+  mqtt_consumer:
+    build: .
+    container_name: mqtt_consumer
+    command: mqttasgi -H mqtt.angizehco.com -p 1883 -U leo -P Goldenhand76 Angizeh_2.asgi:application
+    volumes:
+      - .:/usr/src/app
+
+
+
+volumes:
+  postgres_data:
+  static:
+  dist:
